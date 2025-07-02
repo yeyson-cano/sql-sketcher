@@ -1,9 +1,9 @@
+from typing import List, Dict, Optional, Any
+import json
+import os
 import math
-import random
-from typing import List, Dict, Optional
 
-
-# ---------- UTILIDAD: Cosine Similarity ----------
+# ------------------ UTILS ------------------
 
 def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     dot = sum(a * b for a, b in zip(vec1, vec2))
@@ -13,61 +13,51 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
         return 0.0
     return dot / (norm1 * norm2)
 
+# ------------------ CARGA DE PLANTILLAS ------------------
 
-# ---------- SIMULACIÓN DE EMBEDDINGS ----------
+def load_template_repository(template_path: str = "app/templates.json") -> List[Dict[str, Any]]:
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"Template file not found at: {template_path}")
+    with open(template_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def fake_embedding() -> List[float]:
-    return [random.uniform(-0.05, 0.05) for _ in range(1536)]
+# ------------------ CÁLCULO DE PUNTAJE ------------------
 
+def count_matching_entities(template_str: str, intent: Dict) -> int:
+    score = 0
+    if "{{table}}" in template_str and intent.get("tables"):
+        score += 1
+    if "{{column}}" in template_str and intent.get("columns"):
+        score += 1
+    if "{{value}}" in template_str and intent.get("conditions"):
+        score += 1
+    if "{{group_column}}" in template_str and intent.get("group_by"):
+        score += 1
+    return score
 
-# ---------- REPOSITORIO SIMULADO DE PLANTILLAS ----------
-
-template_repository = [
-    {
-        "id": "tpl_01",
-        "template": "SELECT {{column}} FROM {{table}} WHERE {{column}} > {{value}};",
-        "embedding": fake_embedding(),
-        "entity_count": 2,
-    },
-    {
-        "id": "tpl_02",
-        "template": "SELECT AVG({{column}}) FROM {{table}} GROUP BY {{group_column}};",
-        "embedding": fake_embedding(),
-        "entity_count": 3,
-    },
-    {
-        "id": "tpl_03",
-        "template": "SELECT {{column}} FROM {{table}};",
-        "embedding": fake_embedding(),
-        "entity_count": 1,
-    },
-]
-
-
-# ---------- FUNCIÓN PRINCIPAL DE SELECCIÓN ----------
+# ------------------ SELECCIÓN DE PLANTILLA ------------------
 
 def select_best_template(
     user_embedding: List[float],
     intent: Dict,
-    repository: Optional[List[Dict]] = None
-) -> Dict:
-    if repository is None:
-        repository = template_repository
+    repository: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    repo = repository if repository is not None else load_template_repository()
 
     results = []
 
-    for tpl in repository:
+    for tpl in repo:
         cos_sim = cosine_similarity(user_embedding, tpl["embedding"])
-        entity_score = len(intent.get("columns", [])) + len(intent.get("conditions", []))
-        entity_diff = abs(tpl["entity_count"] - entity_score)
+        match_score = count_matching_entities(tpl["template"], intent)
 
-        final_score = cos_sim * 0.7 + (1 - min(entity_diff / 5, 1)) * 0.3
+        # Puntaje final: mezcla de coseno (70%) y coincidencia de entidades (30%)
+        final_score = cos_sim * 0.7 + (match_score / 4) * 0.3  # 4 es el total posible
 
         results.append({
-            "template_id": tpl["id"],
+            "template_id": tpl["template_id"],
             "template": tpl["template"],
             "cosine_similarity": cos_sim,
-            "entity_diff": entity_diff,
+            "entity_match_score": match_score,
             "final_score": final_score
         })
 
