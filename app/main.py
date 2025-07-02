@@ -8,6 +8,17 @@ from app.embedding import get_embedding  # 👈 Importamos la función de embedd
 from app.selector import select_best_template  # 👈 Importamos el selector de plantillas
 from app.assembler import assemble_query  # 👈 Importamos el ensamblador de consultas
 from app.complex_assembler import apply_complex_assembly # 👈 Importamos el ensamblador complejo
+from app.validator import validate_sql # 👈 Importamos el validador de SQL
+
+db_config = {
+    "dbname": "spider_test",
+    "user": "postgres",
+    "password": "",
+    "host": "localhost",
+    "port": 5432
+}
+result = validate_sql('SELECT "Name" FROM "singer";', db_config)
+print(result)
 
 app = FastAPI(title="SQL Sketcher API")
 
