@@ -4,27 +4,41 @@ from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import os
 import json
+from typing import Dict
 
-# Cargar variables de entorno desde .env
+# Cargar variables de entorno
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 
-# Crear cliente OpenAI moderno (versión 1.x)
+# Crear cliente OpenAI
 client = AsyncOpenAI(api_key=api_key)
 
-async def parse_intent(nl_query: str) -> dict:
+async def parse_intent(nl_query: str, schema: Dict[str, list]) -> dict:
     """
-    Llama a OpenAI para extraer intención SQL estructurada desde una consulta en lenguaje natural.
-    Devuelve un diccionario con los elementos detectados.
+    Extrae la intención SQL a partir de una pregunta NL, usando OpenAI y el esquema proporcionado.
+    :param nl_query: La consulta en lenguaje natural.
+    :param schema: Diccionario con tablas y sus columnas. Ej: { "table1": ["col1", "col2"], ... }
     """
+
+    try:
+        schema_info = "\n".join(
+            f"Table: {table}\nColumns: {', '.join(cols)}"
+            for table, cols in schema.items()
+        )
+    except Exception as e:
+        return {"error": f"Schema formatting error: {str(e)}"}
 
     prompt = f"""
-You are an NL2SQL assistant. Given the following user request in natural language, extract the SQL intent as a structured JSON object.
+You are an NL2SQL assistant. The user will ask questions in natural language. Use the provided database schema to extract the SQL intent in structured JSON.
 
-Request:
+### Database schema:
+{schema_info}
+
+### Request:
 \"\"\"{nl_query}\"\"\"
 
-Output format:
+
+### Output format:
 {{
   "action": "SELECT",
   "tables": [],
@@ -37,19 +51,17 @@ Output format:
   "limit": null
 }}
 
-If some fields don't apply, leave them empty or null.
+Use only tables and columns from the schema.
+If something is unclear, try your best guess. Leave fields empty if not applicable.
 """
 
     try:
         response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
 
-        # Obtener contenido de la respuesta
         parsed_raw = response.choices[0].message.content
 
         if not parsed_raw:
