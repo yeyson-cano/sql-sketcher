@@ -12,7 +12,7 @@ from app.complex_assembler import apply_complex_assembly
 from app.validator import validate_sql
 from app.schema_repository import SchemaRepository
 
-# Configuración para base de datos (aquí: PostgreSQL, pero puede adaptarse)
+# Configuración para base de datos (PostgreSQL por defecto)
 db_config = {
     "dbname": "spider_test",
     "user": "postgres",
@@ -25,34 +25,39 @@ app = FastAPI(title="SQL Sketcher API")
 
 class QueryRequest(BaseModel):
     query: str
-    db_id: Optional[str] = None  # Para usar con datasets como Spider
+    db_id: Optional[str] = None  # Preparado para compatibilidad futura
 
 @app.post("/generate-sql")
 async def generate_sql(request: QueryRequest):
-    # 1. Recuperar esquema desde PostgreSQL
+    # 1. Cargar esquema de la base de datos
     schema_repo = SchemaRepository.from_postgres_config(db_config)
     schema_dict = schema_repo.get_schema_dict()["columns"]
-    db_info = schema_repo.get_db_info()  # Incluye tipo (sqlite/postgresql) y config
+    db_info = schema_repo.get_db_info()
 
-    # 2. Parsear intención con ayuda del esquema
+    # 2. Extraer intención semántica con ayuda del esquema
     intent = await parse_intent(request.query, schema=schema_dict)
 
-    # 3. Obtener embedding semántico
+    # 3. Generar embedding de la consulta
     embedding = await get_embedding(request.query)
 
-    # 4. Seleccionar plantilla base
+    # 4. Seleccionar plantilla ideal
     selected = select_best_template(embedding, intent)
 
-    # 5. Ensamblar la estructura simple con placeholders
+    # 5. Ensamblar consulta parcial
     assembled = assemble_query(selected["template"], intent)
 
-    # 6. Agregar cláusulas JOIN, GROUP BY, etc.
-    enriched = apply_complex_assembly(assembled["query"], intent, schema_repo)
+    # 6. Refinar placeholders incompletos con ayuda del LLM
+    enriched = await apply_complex_assembly(
+        assembled["query"],
+        intent,
+        request.query,
+        schema_repo
+    )
 
-    # 7. Validar sintaxis SQL con EXPLAIN
+    # 7. Validación sintáctica usando PostgreSQL (EXPLAIN)
     validation_result = validate_sql(enriched["query"], db_info)
 
-    # 8. Armar respuesta final
+    # 8. Respuesta final
     return {
         "status": "parsed",
         "input": request.query,
@@ -62,5 +67,5 @@ async def generate_sql(request: QueryRequest):
         "final_query": enriched["query"],
         "missing_fields": assembled["missing_fields"],
         "enrichment_notes": enriched["notes"],
-        "validation": validation_result  # Aquí va el resultado del validador
+        "validation": validation_result
     }

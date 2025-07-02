@@ -29,30 +29,43 @@ async def parse_intent(nl_query: str, schema: Dict[str, list]) -> dict:
         return {"error": f"Schema formatting error: {str(e)}"}
 
     prompt = f"""
-You are an NL2SQL assistant. The user will ask questions in natural language. Use the provided database schema to extract the SQL intent in structured JSON.
+You are an NL2SQL assistant. The user will ask questions in natural language.
+Use the provided database schema to extract the SQL intent in structured JSON format.
 
-### Database schema:
+Only include tables and columns that appear in the schema.
+
+### Database Schema:
 {schema_info}
 
-### Request:
+### Natural Language Query:
 \"\"\"{nl_query}\"\"\"
 
-
-### Output format:
+### Structured Output Format:
 {{
   "action": "SELECT",
-  "tables": [],
-  "columns": [],
-  "conditions": [],
-  "aggregations": [],
+  "tables": ["table_name"],
+  "columns": ["column1", "column2"],
+  "conditions": [
+    {{
+      "column": "column_name",
+      "operator": ">",        // or <, =, LIKE, etc.
+      "value": 5              // can be number or string
+    }}
+  ],
+  "aggregations": [
+    {{
+      "function": "AVG",       // or SUM, COUNT, MAX, etc.
+      "column": "score"
+    }}
+  ],
   "joins": false,
-  "group_by": [],
-  "order_by": [],
-  "limit": null
+  "group_by": ["column_name"],
+  "order_by": ["column_name"],
+  "limit": 10
 }}
 
-Use only tables and columns from the schema.
-If something is unclear, try your best guess. Leave fields empty if not applicable.
+If a field is not needed, leave it as an empty list, null, or false.
+Return only the JSON. Do not include explanations.
 """
 
     try:
