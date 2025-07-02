@@ -1,21 +1,23 @@
 # app/main.py
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
+from app.parser import parse_intent  # 👈 Importamos el parser
 
 app = FastAPI(title="SQL Sketcher API")
 
 class QueryRequest(BaseModel):
     query: str
-    db_id: Optional[str] = None  # Usado para pruebas con el dataset Spider
+    db_id: Optional[str] = None  # Preparado para usar Spider
 
 @app.post("/generate-sql")
 async def generate_sql(request: QueryRequest):
-    # Por ahora es solo un prototipo que responde algo fijo
+    # Llamada al parser de intención
+    intent = await parse_intent(request.query)
+
     return {
-        "status": "ok",
+        "status": "parsed",
         "input": request.query,
-        "db": request.db_id,
-        "sql": "SELECT * FROM dummy_table WHERE condition = true;"
+        "intent": intent
     }
